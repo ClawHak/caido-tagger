@@ -3,7 +3,7 @@ import type { API } from "caido-tagger-backend";
 import { getState, setState, subscribe, filteredRequests } from "../state";
 import type { TaggedRequestRow } from "../state";
 import { createTagPillsContainer } from "../components/TagPill";
-import { loadTaggedRequests, sendToReplay } from "../api";
+import { loadTaggedRequests, sendToReplay, sendToAutomate } from "../api";
 
 type SDK = Caido<API>;
 
@@ -191,6 +191,23 @@ function buildBulkActions(sdk: SDK): HTMLElement {
     sdk.window.showToast(`Sent ${ok}/${ids.length} to Replay`, { variant: "success" });
   });
 
+  const automateBtn = document.createElement("button");
+  automateBtn.className = "ct-btn ct-btn--secondary ct-btn--sm";
+  automateBtn.textContent = "Send to Automate";
+  automateBtn.addEventListener("click", async () => {
+    const ids = [...selectedIds];
+    let ok = 0;
+    for (const id of ids) {
+      try {
+        await sendToAutomate(sdk, id);
+        ok++;
+      } catch {
+        // continue
+      }
+    }
+    sdk.window.showToast(`Sent ${ok}/${ids.length} to Automate`, { variant: "success" });
+  });
+
   const deselectBtn = document.createElement("button");
   deselectBtn.className = "ct-btn ct-btn--secondary ct-btn--sm";
   deselectBtn.textContent = "Deselect";
@@ -200,6 +217,7 @@ function buildBulkActions(sdk: SDK): HTMLElement {
 
   bar.appendChild(label);
   bar.appendChild(replayBtn);
+  bar.appendChild(automateBtn);
   bar.appendChild(deselectBtn);
 
   return bar;

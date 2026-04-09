@@ -124,3 +124,14 @@ export async function sendToReplay(
     input: { requestSource: { id: requestId } },
   });
 }
+
+// --- Automate ---
+
+export async function sendToAutomate(
+  sdk: SDK,
+  requestId: string
+): Promise<void> {
+  await sdk.graphql.createAutomateSession({
+    input: { requestSource: { id: requestId } },
+  });
+}
