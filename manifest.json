@@ -1,0 +1,30 @@
+{
+  "id": "caido-tagger",
+  "name": "Caido Tagger",
+  "version": "0.1.0",
+  "description": "Generic request tagging system for Caido. Tag HTTP requests with custom labels and use them to drive tool integrations.",
+  "author": {
+    "name": "Mike (ClawHak)",
+    "email": "mike@clawhak.sh",
+    "url": "https://github.com/ClawHak/caido-tagger"
+  },
+  "plugins": [
+    {
+      "kind": "frontend",
+      "id": "caido-tagger-frontend",
+      "name": "Caido Tagger",
+      "entrypoint": "frontend/script.js",
+      "style": "frontend/style.css",
+      "backend": {
+        "id": "caido-tagger-backend"
+      }
+    },
+    {
+      "kind": "backend",
+      "id": "caido-tagger-backend",
+      "name": "Caido Tagger Backend",
+      "runtime": "javascript",
+      "entrypoint": "backend/script.js"
+    }
+  ]
+}

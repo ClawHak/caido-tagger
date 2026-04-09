@@ -1,0 +1,17 @@
+{
+  "name": "caido-tagger",
+  "version": "0.1.0",
+  "description": "Generic request tagging system for Caido",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/clean.js && pnpm -r build && node scripts/pack.js",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "@caido/plugin-manifest": "0.1.3",
+    "jszip": "3.10.1",
+    "typescript": "5.4.3",
+    "vite": "5.2.7"
+  }
+}

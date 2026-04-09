@@ -1,0 +1,77 @@
+# Project docs (local only)
+ARCHITECTURE.md
+TODO.md
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Plugin package
+*.zip
+
+# Signing keys — NEVER commit
+*.pem
+*.key
+private.key
+public.key
+signing-key*
+
+# Private config — NEVER commit
+config/tags.json
+*.private.json
+/private/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Cache
+.cache/
+.eslintcache
+.stylelintcache
+
+# TypeScript
+*.js.map
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Temp
+tmp/
+temp/
+*.tmp

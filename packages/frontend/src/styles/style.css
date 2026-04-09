@@ -1,0 +1,72 @@
+/* caido-tagger styles */
+
+.ct-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  font-family: inherit;
+}
+
+/* Tab bar */
+.ct-tabbar {
+  display: flex;
+  border-bottom: 1px solid var(--c-border, #2a2a2a);
+  padding: 0 1rem;
+  gap: 0.25rem;
+}
+
+.ct-tab {
+  padding: 0.6rem 1rem;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--c-text-muted, #888);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.ct-tab:hover {
+  color: var(--c-text, #eee);
+}
+
+.ct-tab--active {
+  color: var(--c-text, #eee);
+  border-bottom-color: var(--c-accent, #f97316);
+}
+
+/* Content area */
+.ct-content {
+  flex: 1;
+  overflow: auto;
+  padding: 1rem;
+}
+
+/* Placeholder */
+.ct-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--c-text-muted, #888);
+  gap: 0.5rem;
+  text-align: center;
+}
+
+.ct-placeholder strong {
+  color: var(--c-text, #eee);
+}
+
+/* Tag pill */
+.ct-tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
