@@ -4,6 +4,7 @@ import { getState, setState, subscribe, filteredRequests } from "../state";
 import type { TaggedRequestRow } from "../state";
 import { createTagPillsContainer } from "../components/TagPill";
 import { loadTaggedRequests, sendToReplay, sendToAutomate } from "../api";
+import { getRegisteredActions } from "../registry";
 
 type SDK = Caido<API>;
 
@@ -218,6 +219,39 @@ function buildBulkActions(sdk: SDK): HTMLElement {
   bar.appendChild(label);
   bar.appendChild(replayBtn);
   bar.appendChild(automateBtn);
+
+  // Plugin Actions dropdown — populated from window.__caidoTagger registry
+  const pluginActions = getRegisteredActions();
+  if (pluginActions.length > 0) {
+    const select = document.createElement("select");
+    select.className = "ct-select ct-select--sm";
+
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Plugin Actions…";
+    select.appendChild(placeholder);
+
+    pluginActions.forEach((action) => {
+      const opt = document.createElement("option");
+      opt.value = action.id;
+      opt.textContent = action.label;
+      select.appendChild(opt);
+    });
+
+    select.addEventListener("change", async () => {
+      const id = select.value;
+      if (!id) return;
+      const action = pluginActions.find((a) => a.id === id);
+      if (action) {
+        await action.handler([...selectedIds]);
+        sdk.window.showToast(`"${action.label}" executed`, { variant: "success" });
+      }
+      select.value = "";
+    });
+
+    bar.appendChild(select);
+  }
+
   bar.appendChild(deselectBtn);
 
   return bar;

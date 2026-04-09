@@ -4,6 +4,7 @@ import type { CommandContext } from "@caido/sdk-frontend";
 
 import { getState, setState } from "./state";
 import { loadProject, loadTags, loadTaggedRequests } from "./api";
+import { initRegistry } from "./registry";
 import { createTaggedRequestsPage } from "./pages/TaggedRequests";
 import { createTagConfigPage } from "./pages/TagConfig";
 import { createTaggingModal } from "./components/TaggingModal";
@@ -80,6 +81,9 @@ function buildPage(sdk: SDK): HTMLElement {
 // --- Init ---
 
 export const init = async (sdk: SDK) => {
+  // Expose global plugin registry for other plugins
+  initRegistry();
+
   // Load project context
   await loadProject(sdk);
 
