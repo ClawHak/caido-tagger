@@ -58,6 +58,14 @@ export type UpdateTagParams = {
   severity?: Severity;
 };
 
+export type RequestMeta = {
+  id: string;
+  method: string;
+  host: string;
+  path: string;
+  query: string;
+};
+
 // --- API handlers ---
 
 async function apiCreateTag(sdk: SDK, params: CreateTagParams): Promise<Tag> {
@@ -180,6 +188,26 @@ async function apiIsRequestTagged(
   return isRequestTagged(db, request_id, project_id);
 }
 
+async function apiGetRequestMeta(
+  sdk: SDK,
+  request_ids: string[]
+): Promise<RequestMeta[]> {
+  const results: RequestMeta[] = [];
+  for (const id of request_ids) {
+    const item = await sdk.requests.get(id);
+    if (item) {
+      results.push({
+        id,
+        method: item.request.getMethod(),
+        host: item.request.getHost(),
+        path: item.request.getPath(),
+        query: item.request.getQuery(),
+      });
+    }
+  }
+  return results;
+}
+
 function apiPing(_sdk: SDK): string {
   return "caido-tagger backend ready";
 }
@@ -188,6 +216,7 @@ function apiPing(_sdk: SDK): string {
 
 export type API = DefineAPI<{
   ping: typeof apiPing;
+  getRequestMeta: typeof apiGetRequestMeta;
   // Tag CRUD
   createTag: typeof apiCreateTag;
   getTags: typeof apiGetTags;
@@ -212,6 +241,7 @@ export type API = DefineAPI<{
 
 export function init(sdk: SDK<API>) {
   sdk.api.register("ping", apiPing);
+  sdk.api.register("getRequestMeta", apiGetRequestMeta);
 
   // Tag CRUD
   sdk.api.register("createTag", apiCreateTag);
