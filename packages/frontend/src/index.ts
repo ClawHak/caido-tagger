@@ -3,7 +3,7 @@ import type { API } from "caido-tagger-backend";
 import type { CommandContext } from "@caido/sdk-frontend";
 
 import { getState, setState } from "./state";
-import { loadProject, loadTags, loadTaggedRequests, refreshAll, sendToReplay, sendToAutomate } from "./api";
+import { loadProject, loadTags, loadTaggedRequests, refreshAll } from "./api";
 
 import { initRegistry } from "./registry";
 import { createTaggedRequestsPage } from "./pages/TaggedRequests";
@@ -17,8 +17,6 @@ type SDK = Caido<API>;
 const Page = "/caido-tagger" as const;
 const Commands = {
   tagRequest: "caido-tagger.tag-request",
-  sendToReplay: "caido-tagger.send-to-replay",
-  sendToAutomate: "caido-tagger.send-to-automate",
 } as const;
 
 // --- Page builder ---
@@ -140,49 +138,11 @@ export const init = async (sdk: SDK) => {
     when: (context: CommandContext) => context.type === "RequestRowContext",
   });
 
-  // Send to Replay
-  sdk.commands.register(Commands.sendToReplay, {
-    name: "Send to Replay",
-    group: "caido-tagger",
-    run: async (context: CommandContext) => {
-      if (context.type !== "RequestRowContext") return;
-      for (const r of context.requests) {
-        await sendToReplay(sdk, r.id);
-      }
-    },
-    when: (context: CommandContext) => context.type === "RequestRowContext",
-  });
-
-  // Send to Automate
-  sdk.commands.register(Commands.sendToAutomate, {
-    name: "Send to Automate",
-    group: "caido-tagger",
-    run: async (context: CommandContext) => {
-      if (context.type !== "RequestRowContext") return;
-      for (const r of context.requests) {
-        await sendToAutomate(sdk, r.id);
-      }
-    },
-    when: (context: CommandContext) => context.type === "RequestRowContext",
-  });
-
-  // Register context menu entries in HTTP History
+  // Register context menu entry in HTTP History
   sdk.menu.registerItem({
     type: "RequestRow",
     commandId: Commands.tagRequest,
     leadingIcon: "fas fa-tags",
-  });
-
-  sdk.menu.registerItem({
-    type: "RequestRow",
-    commandId: Commands.sendToReplay,
-    leadingIcon: "fas fa-play",
-  });
-
-  sdk.menu.registerItem({
-    type: "RequestRow",
-    commandId: Commands.sendToAutomate,
-    leadingIcon: "fas fa-robot",
   });
 
   // React to project switches in the Caido UI
