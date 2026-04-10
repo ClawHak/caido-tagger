@@ -4,7 +4,7 @@
 import type { Caido } from "@caido/sdk-frontend";
 import type { API } from "caido-tagger-backend";
 import { createTagPill } from "./TagPill";
-import { getState } from "../state";
+import { getState, effectiveTags } from "../state";
 import { addTag, removeTag, loadTaggedRequests } from "../api";
 
 type SDK = Caido<API>;
@@ -18,7 +18,7 @@ type TaggingModalOptions = {
 
 export function createTaggingModal(opts: TaggingModalOptions): HTMLElement {
   const { sdk, requestIds, projectId } = opts;
-  const { tags } = getState();
+  const tags = effectiveTags(); // project tags override global tags with same name
 
   const overlay = document.createElement("div");
   overlay.className = "ct-modal-overlay";

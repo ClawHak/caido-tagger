@@ -1,5 +1,5 @@
 import { SDK, DefineAPI } from "caido:plugin";
-import { getDb } from "./db";
+import { getDb, AsyncDB } from "./db";
 import {
   createTag,
   getTags,
@@ -20,6 +20,18 @@ import {
   isRequestTagged,
 } from "./assignments";
 
+// --- Current project ---
+
+async function apiGetCurrentProject(sdk: SDK): Promise<{ id: string; name: string } | null> {
+  try {
+    const project = await sdk.projects.getCurrent();
+    if (!project) return null;
+    return { id: project.getId(), name: project.getName() };
+  } catch {
+    return null;
+  }
+}
+
 // --- Exported types (used by frontend) ---
 
 export type Severity = "info" | "low" | "medium" | "high" | "critical";
@@ -30,9 +42,9 @@ export type Tag = {
   name: string;
   color: string;
   description: string;
-  severity: Severity | null;
+  severity: string;    // "" means no severity — Caido RPC rejects null
   scope: TagScope;
-  project_id: string | null;
+  project_id: string;  // "" means global — Caido RPC rejects null
   created_at: number;
 };
 
@@ -45,17 +57,17 @@ export type TaggedRequest = {
 export type CreateTagParams = {
   name: string;
   color: string;
-  description?: string;
-  severity?: Severity;
+  description: string;
+  severity: string;   // "" means no severity
   scope: TagScope;
-  project_id?: string;
+  project_id: string; // "" means global scope
 };
 
 export type UpdateTagParams = {
-  name?: string;
-  color?: string;
-  description?: string;
-  severity?: Severity;
+  name: string;
+  color: string;
+  description: string;
+  severity: string; // "" means no severity
 };
 
 export type RequestMeta = {
@@ -64,6 +76,7 @@ export type RequestMeta = {
   host: string;
   path: string;
   query: string;
+  status: number; // HTTP response status code; 0 = no response yet
 };
 
 // --- API handlers ---
@@ -73,7 +86,8 @@ async function apiCreateTag(sdk: SDK, params: CreateTagParams): Promise<Tag> {
   return createTag(db, params);
 }
 
-async function apiGetTags(sdk: SDK, project_id?: string): Promise<Tag[]> {
+// project_id: "" means global only (no optional params — Caido RPC serializes undefined as null)
+async function apiGetTags(sdk: SDK, project_id: string): Promise<Tag[]> {
   const db = await getDb(sdk);
   return getTags(db, project_id ? { project_id } : undefined);
 }
@@ -170,13 +184,14 @@ async function apiGetTagsForRequest(
   return getTagsForRequest(db, request_id, project_id);
 }
 
+// tag_ids: [] means "all tags" (no optional params — Caido RPC serializes undefined as null)
 async function apiGetTaggedRequestIds(
   sdk: SDK,
   project_id: string,
-  tag_ids?: string[]
+  tag_ids: string[]
 ): Promise<TaggedRequest[]> {
   const db = await getDb(sdk);
-  return getTaggedRequestIds(db, project_id, tag_ids);
+  return getTaggedRequestIds(db, project_id, tag_ids.length > 0 ? tag_ids : undefined);
 }
 
 async function apiIsRequestTagged(
@@ -202,6 +217,7 @@ async function apiGetRequestMeta(
         host: item.request.getHost(),
         path: item.request.getPath(),
         query: item.request.getQuery(),
+        status: item.response?.getCode() ?? 0,
       });
     }
   }
@@ -216,6 +232,7 @@ function apiPing(_sdk: SDK): string {
 
 export type API = DefineAPI<{
   ping: typeof apiPing;
+  getCurrentProject: typeof apiGetCurrentProject;
   getRequestMeta: typeof apiGetRequestMeta;
   // Tag CRUD
   createTag: typeof apiCreateTag;
@@ -241,6 +258,7 @@ export type API = DefineAPI<{
 
 export function init(sdk: SDK<API>) {
   sdk.api.register("ping", apiPing);
+  sdk.api.register("getCurrentProject", apiGetCurrentProject);
   sdk.api.register("getRequestMeta", apiGetRequestMeta);
 
   // Tag CRUD

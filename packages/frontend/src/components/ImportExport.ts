@@ -1,20 +1,23 @@
 import type { Tag } from "../state";
 
+type ExportedTag = {
+  name: string;
+  color: string;
+  severity: string;
+  description: string;
+  scope: "global" | "project";
+};
+
 type ExportData = {
-  version: "1.0";
+  version: "1.1";
   exported_at: string;
   source: "caido-tagger";
-  tags: Array<{
-    name: string;
-    color: string;
-    severity: string;
-    description: string;
-  }>;
+  tags: ExportedTag[];
 };
 
 export function exportTags(tags: Tag[]): void {
   const data: ExportData = {
-    version: "1.0",
+    version: "1.1",
     exported_at: new Date().toISOString(),
     source: "caido-tagger",
     tags: tags.map((t) => ({
@@ -22,6 +25,7 @@ export function exportTags(tags: Tag[]): void {
       color: t.color,
       severity: t.severity ?? "",
       description: t.description,
+      scope: t.scope,
     })),
   };
 
@@ -37,7 +41,7 @@ export function exportTags(tags: Tag[]): void {
 }
 
 export function importTags(
-  onImport: (tags: ExportData["tags"]) => void,
+  onImport: (tags: ExportedTag[]) => void,
   onError: (msg: string) => void
 ): void {
   const input = document.createElement("input");
@@ -51,19 +55,28 @@ export function importTags(
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const raw = JSON.parse(e.target?.result as string) as ExportData;
+        const raw = JSON.parse(e.target?.result as string) as Record<string, unknown>;
 
-        if (raw.source !== "caido-tagger" || raw.version !== "1.0") {
+        if (raw["source"] !== "caido-tagger") {
           onError("Invalid file format. Expected caido-tagger export.");
           return;
         }
 
-        if (!Array.isArray(raw.tags)) {
+        if (!Array.isArray(raw["tags"])) {
           onError("No tags found in file.");
           return;
         }
 
-        onImport(raw.tags);
+        // Normalise: v1.0 files have no scope field → default to "global"
+        const tags: ExportedTag[] = (raw["tags"] as Record<string, unknown>[]).map((t) => ({
+          name: String(t["name"] ?? ""),
+          color: String(t["color"] ?? "#e74c3c"),
+          severity: String(t["severity"] ?? ""),
+          description: String(t["description"] ?? ""),
+          scope: (t["scope"] === "project" ? "project" : "global") as "global" | "project",
+        }));
+
+        onImport(tags);
       } catch {
         onError("Failed to parse JSON file.");
       }
@@ -73,3 +86,5 @@ export function importTags(
 
   input.click();
 }
+
+export type { ExportedTag };

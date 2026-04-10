@@ -1,37 +1,60 @@
 import { SDK } from "caido:plugin";
-import { Database } from "sqlite";
+import { Database, Statement } from "sqlite";
 
-let _db: Database | null = null;
+// In Caido's QuickJS runtime, db.prepare() is actually async (returns Promise<Statement>)
+// despite the TypeScript types declaring it as synchronous.
+// AsyncDB wraps the raw Database so all callers can use `await db.prepare(sql)` safely.
+export type AsyncDB = {
+  exec(sql: string): Promise<void>;
+  prepare(sql: string): Promise<Statement>;
+};
 
-export async function getDb(sdk: SDK): Promise<Database> {
-  if (_db) return _db;
-  _db = await sdk.meta.db();
-  await initSchema(_db);
-  return _db;
+let _initPromise: Promise<AsyncDB> | null = null;
+
+export function getDb(sdk: SDK): Promise<AsyncDB> {
+  if (_initPromise) return _initPromise;
+  _initPromise = (async () => {
+    const rawDb = await sdk.meta.db();
+    const db = wrapDb(rawDb);
+    await initSchema(db, sdk);
+    return db;
+  })().catch((err) => {
+    _initPromise = null; // allow retry on next call
+    throw err;
+  });
+  return _initPromise;
 }
 
-async function initSchema(db: Database): Promise<void> {
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS schema_version (
-      version INTEGER NOT NULL
-    );
-  `);
+function wrapDb(rawDb: Database): AsyncDB {
+  return {
+    exec: (sql) => rawDb.exec(sql),
+    prepare: async (sql) => rawDb.prepare(sql) as unknown as Promise<Statement>,
+  };
+}
 
-  const row = await db.prepare("SELECT version FROM schema_version LIMIT 1").get<{ version: number }>();
+async function initSchema(db: AsyncDB, sdk: SDK): Promise<void> {
+  await db.exec(
+    "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)"
+  );
+
+  const row = await (await db.prepare("SELECT version FROM schema_version LIMIT 1")).get<{ version: number }>();
   const currentVersion = row?.version ?? 0;
 
   if (currentVersion < 1) {
-    await migrate_v1(db);
+    await migrate_v1(db, sdk);
     if (currentVersion === 0) {
-      await db.exec("INSERT INTO schema_version (version) VALUES (1)");
+      await (await db.prepare("INSERT INTO schema_version (version) VALUES (?)")).run(1);
     } else {
-      await db.exec("UPDATE schema_version SET version = 1");
+      await (await db.prepare("UPDATE schema_version SET version = ?")).run(1);
     }
+    sdk.console.log("caido-tagger: schema v1 migration complete");
   }
 }
 
-async function migrate_v1(db: Database): Promise<void> {
-  await db.exec(`
+async function migrate_v1(db: AsyncDB, sdk: SDK): Promise<void> {
+  sdk.console.log("caido-tagger: running migration v1...");
+
+  await (await db.prepare(`
     CREATE TABLE IF NOT EXISTS tags (
       id          TEXT PRIMARY KEY,
       name        TEXT NOT NULL,
@@ -41,25 +64,33 @@ async function migrate_v1(db: Database): Promise<void> {
       scope       TEXT NOT NULL DEFAULT 'global',
       project_id  TEXT,
       created_at  INTEGER NOT NULL
-    );
+    )
+  `)).run();
+  sdk.console.log("caido-tagger: tags table OK");
 
+  await (await db.prepare(`
     CREATE TABLE IF NOT EXISTS tag_project_overrides (
       tag_id      TEXT NOT NULL,
       project_id  TEXT NOT NULL,
       severity    TEXT NOT NULL,
       PRIMARY KEY (tag_id, project_id)
-    );
+    )
+  `)).run();
+  sdk.console.log("caido-tagger: tag_project_overrides table OK");
 
+  await (await db.prepare(`
     CREATE TABLE IF NOT EXISTS request_tags (
       request_id  TEXT NOT NULL,
       tag_id      TEXT NOT NULL,
       project_id  TEXT NOT NULL,
       tagged_at   INTEGER NOT NULL,
       PRIMARY KEY (request_id, tag_id)
-    );
+    )
+  `)).run();
+  sdk.console.log("caido-tagger: request_tags table OK");
 
-    CREATE INDEX IF NOT EXISTS idx_request_tags_request ON request_tags (request_id, project_id);
-    CREATE INDEX IF NOT EXISTS idx_request_tags_tag ON request_tags (tag_id, project_id);
-    CREATE INDEX IF NOT EXISTS idx_tags_scope ON tags (scope, project_id);
-  `);
+  await (await db.prepare("CREATE INDEX IF NOT EXISTS idx_request_tags_request ON request_tags (request_id, project_id)")).run();
+  await (await db.prepare("CREATE INDEX IF NOT EXISTS idx_request_tags_tag ON request_tags (tag_id, project_id)")).run();
+  await (await db.prepare("CREATE INDEX IF NOT EXISTS idx_tags_scope ON tags (scope, project_id)")).run();
+  sdk.console.log("caido-tagger: indexes OK");
 }

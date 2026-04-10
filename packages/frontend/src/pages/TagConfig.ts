@@ -2,6 +2,7 @@ import type { Caido } from "@caido/sdk-frontend";
 import type { API } from "caido-tagger-backend";
 import { getState, setState, subscribe } from "../state";
 import type { Tag, Severity } from "../state";
+import type { TagScope } from "caido-tagger-backend";
 import { createTagModal } from "../components/TagModal";
 import { exportTags, importTags } from "../components/ImportExport";
 import {
@@ -36,6 +37,12 @@ export function createTagConfigPage(sdk: SDK): HTMLElement {
 function buildTagConfigContent(sdk: SDK): HTMLElement {
   const { tags, overrides, projectId, projectName } = getState();
 
+  const globalTags = tags.filter((t) => t.scope === "global");
+  const projectTags = tags.filter((t) => t.scope === "project");
+
+  // Names of project tags — used to mark overridden global tags
+  const projectTagNames = new Set(projectTags.map((t) => t.name));
+
   const wrap = document.createElement("div");
 
   // Header
@@ -53,54 +60,52 @@ function buildTagConfigContent(sdk: SDK): HTMLElement {
   `;
   wrap.appendChild(header);
 
-  // Global tags table
+  // Global tags section
   const globalSection = document.createElement("div");
   globalSection.className = "ct-section";
   globalSection.innerHTML = `
     <div class="ct-section__title">
       <h4>Global Tags</h4>
-      <button class="ct-btn ct-btn--primary ct-btn--sm" id="ct-new-tag-btn">+ New Tag</button>
+      <button class="ct-btn ct-btn--primary ct-btn--sm" id="ct-new-global-btn">+ New Tag</button>
     </div>
   `;
-
-  const globalTable = buildTagsTable(sdk, tags, false);
-  globalSection.appendChild(globalTable);
+  globalSection.appendChild(buildTagsTable(sdk, globalTags, "global", projectTagNames));
   wrap.appendChild(globalSection);
 
-  // Project overrides section
+  // Project tags section (only when in a project)
   if (projectId) {
-    const overrideTags = tags.filter((t) => overrides[t.id] !== undefined);
+    const projectSection = document.createElement("div");
+    projectSection.className = "ct-section";
+    projectSection.innerHTML = `
+      <div class="ct-section__title">
+        <h4>Project Tags <span class="ct-muted">(${projectName ?? "this project"})</span></h4>
+        <button class="ct-btn ct-btn--primary ct-btn--sm" id="ct-new-project-btn">+ New Tag</button>
+      </div>
+      <p class="ct-hint">Project tags override global tags with the same name.</p>
+    `;
+    projectSection.appendChild(buildTagsTable(sdk, projectTags, "project", new Set()));
+    wrap.appendChild(projectSection);
 
+    // Project overrides section
     const overrideSection = document.createElement("div");
     overrideSection.className = "ct-section ct-section--overrides";
     overrideSection.innerHTML = `
       <div class="ct-section__title">
-        <h4>Project Overrides <span class="ct-muted">(${projectName ?? "current project"})</span></h4>
+        <h4>Severity Overrides <span class="ct-muted">(${projectName ?? "this project"})</span></h4>
       </div>
-      <p class="ct-hint">Only tags that differ from their global severity appear here.</p>
+      <p class="ct-hint">Override the severity of global tags for this project only.</p>
     `;
-
-    overrideSection.appendChild(buildOverridesTable(sdk, tags, overrides, projectId));
+    overrideSection.appendChild(buildOverridesTable(sdk, globalTags, projectTags, overrides, projectId));
     wrap.appendChild(overrideSection);
+
+    wrap.querySelector("#ct-new-project-btn")?.addEventListener("click", () => {
+      openTagModal(sdk, projectId, "project");
+    });
   }
 
-  // Event handlers
-  wrap.querySelector("#ct-new-tag-btn")?.addEventListener("click", () => {
-    const modal = createTagModal({
-      onSave: async (data) => {
-        await createTag(sdk, {
-          name: data.name,
-          color: data.color,
-          severity: data.severity as Severity || undefined,
-          description: data.description,
-          scope: data.scope,
-          project_id: data.scope === "project" ? (projectId ?? undefined) : undefined,
-        });
-        if (projectId) await loadTags(sdk, projectId);
-      },
-      onCancel: () => {},
-    });
-    document.body.appendChild(modal);
+  // New Global Tag button
+  wrap.querySelector("#ct-new-global-btn")?.addEventListener("click", () => {
+    openTagModal(sdk, projectId, "global");
   });
 
   wrap.querySelector("#ct-export-btn")?.addEventListener("click", () => {
@@ -110,17 +115,27 @@ function buildTagConfigContent(sdk: SDK): HTMLElement {
   wrap.querySelector("#ct-import-btn")?.addEventListener("click", () => {
     importTags(
       async (imported) => {
+        const existing = getState().tags;
+        let created = 0, skipped = 0;
         for (const t of imported) {
-          await createTag(sdk, {
-            name: t.name,
-            color: t.color,
-            severity: (t.severity as Severity) || undefined,
-            description: t.description,
-            scope: "global",
-          });
+          const scope = t.scope ?? "global";
+          const project_id = scope === "project" ? (projectId ?? "") : "";
+          const exists = existing.some(
+            (e) => e.name === t.name && e.scope === scope &&
+              (scope === "global" || e.project_id === project_id)
+          );
+          if (exists) {
+            skipped++;
+          } else {
+            await createTag(sdk, { name: t.name, color: t.color, severity: t.severity || "", description: t.description, scope, project_id });
+            created++;
+          }
         }
-        if (projectId) await loadTags(sdk, projectId);
-        sdk.window.showToast(`Imported ${imported.length} tags`, { variant: "success" });
+        await loadTags(sdk, projectId);
+        const parts = [];
+        if (created) parts.push(`${created} created`);
+        if (skipped) parts.push(`${skipped} skipped`);
+        sdk.window.showToast(`Import: ${parts.join(", ")}`, { variant: "success" });
       },
       (err) => sdk.window.showToast(err, { variant: "error" })
     );
@@ -129,26 +144,64 @@ function buildTagConfigContent(sdk: SDK): HTMLElement {
   return wrap;
 }
 
-function buildTagsTable(sdk: SDK, tags: Tag[], _isOverride: boolean): HTMLElement {
+function openTagModal(sdk: SDK, projectId: string | null, defaultScope: TagScope, tag?: Tag): void {
+  const { projectId: pid } = getState();
+  const modal = createTagModal({
+    tag,
+    onSave: async (data) => {
+      if (tag) {
+        await updateTag(sdk, tag.id, {
+          name: data.name,
+          color: data.color,
+          severity: data.severity,
+          description: data.description,
+        });
+      } else {
+        await createTag(sdk, {
+          name: data.name,
+          color: data.color,
+          severity: data.severity,
+          description: data.description,
+          scope: data.scope,
+          project_id: data.scope === "project" ? (pid ?? "") : "",
+        });
+      }
+      await loadTags(sdk, pid);
+    },
+    onCancel: () => {},
+    onError: (err) => sdk.window.showToast(`Failed to save tag: ${err}`, { variant: "error" }),
+    defaultScope,
+  });
+  document.body.appendChild(modal);
+}
+
+function buildTagsTable(sdk: SDK, tags: Tag[], scope: TagScope, overriddenNames: Set<string>): HTMLElement {
   const { projectId } = getState();
 
   if (tags.length === 0) {
     const empty = document.createElement("p");
     empty.className = "ct-muted ct-empty";
-      empty.textContent = "No tags yet. Click + New Tag to create one.";
+    empty.textContent = "No tags yet. Click + New Tag to create one.";
     return empty;
   }
 
   const table = document.createElement("table");
-  table.className = "ct-table";
+  table.className = "ct-table ct-table--tags";
   table.innerHTML = `
+    <colgroup>
+      <col style="width:48px">
+      <col style="width:200px">
+      <col style="width:160px">
+      <col>
+      <col style="width:72px">
+    </colgroup>
     <thead>
       <tr>
-        <th style="width:40px">Color</th>
+        <th>Color</th>
         <th>Name</th>
         <th>Severity</th>
         <th>Description</th>
-        <th style="width:80px"></th>
+        <th></th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -157,10 +210,15 @@ function buildTagsTable(sdk: SDK, tags: Tag[], _isOverride: boolean): HTMLElemen
   const tbody = table.querySelector("tbody")!;
 
   tags.forEach((tag) => {
+    const isOverridden = scope === "global" && overriddenNames.has(tag.name);
     const tr = document.createElement("tr");
+    if (isOverridden) tr.className = "ct-row--muted";
     tr.innerHTML = `
       <td><span class="ct-color-dot" style="background:${tag.color}"></span></td>
-      <td><strong>${tag.name}</strong></td>
+      <td>
+        <strong>${tag.name}</strong>
+        ${isOverridden ? `<span class="ct-badge ct-badge--override" title="Overridden by a project tag">project override</span>` : ""}
+      </td>
       <td>${tag.severity ? `<span class="ct-severity ct-severity--${tag.severity}">${tag.severity}</span>` : "<span class='ct-muted'>—</span>"}</td>
       <td class="ct-muted">${tag.description || "—"}</td>
       <td class="ct-actions">
@@ -170,26 +228,13 @@ function buildTagsTable(sdk: SDK, tags: Tag[], _isOverride: boolean): HTMLElemen
     `;
 
     tr.querySelector("[data-action='edit']")?.addEventListener("click", () => {
-      const modal = createTagModal({
-        tag,
-        onSave: async (data) => {
-          await updateTag(sdk, tag.id, {
-            name: data.name,
-            color: data.color,
-            severity: (data.severity as Severity) || undefined,
-            description: data.description,
-          });
-          if (projectId) await loadTags(sdk, projectId);
-        },
-        onCancel: () => {},
-      });
-      document.body.appendChild(modal);
+      openTagModal(sdk, projectId, scope, tag);
     });
 
     tr.querySelector("[data-action='delete']")?.addEventListener("click", async () => {
       if (!confirm(`Delete tag "${tag.name}"? This will remove it from all requests.`)) return;
       await deleteTag(sdk, tag.id);
-      if (projectId) await loadTags(sdk, projectId);
+      await loadTags(sdk, projectId);
     });
 
     tbody.appendChild(tr);
@@ -201,19 +246,27 @@ function buildTagsTable(sdk: SDK, tags: Tag[], _isOverride: boolean): HTMLElemen
 function buildOverridesTable(
   sdk: SDK,
   tags: Tag[],
+  projectTags: Tag[],
   overrides: Record<string, Severity>,
   projectId: string
 ): HTMLElement {
   const table = document.createElement("table");
-  table.className = "ct-table";
+  table.className = "ct-table ct-table--tags";
   table.innerHTML = `
+    <colgroup>
+      <col style="width:48px">
+      <col style="width:200px">
+      <col style="width:160px">
+      <col>
+      <col style="width:72px">
+    </colgroup>
     <thead>
       <tr>
-        <th style="width:40px">Color</th>
+        <th>Color</th>
         <th>Name</th>
-        <th>Global Severity</th>
+        <th>Effective Severity</th>
         <th>Project Override</th>
-        <th style="width:40px"></th>
+        <th></th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -223,12 +276,16 @@ function buildOverridesTable(
 
   tags.forEach((tag) => {
     const tr = document.createElement("tr");
-    const currentOverride = overrides[tag.id] ?? tag.severity ?? "";
+    // Winning order: explicit override > project tag (same name) > global tag
+    const projectTag = projectTags.find((pt) => pt.name === tag.name);
+    const effectiveColor = projectTag?.color ?? tag.color;
+    const effectiveSeverity = overrides[tag.id] ?? projectTag?.severity ?? tag.severity ?? "";
+    const currentOverride = overrides[tag.id] ?? "";
 
     tr.innerHTML = `
-      <td><span class="ct-color-dot" style="background:${tag.color}"></span></td>
+      <td><span class="ct-color-dot" style="background:${effectiveColor}"></span></td>
       <td><strong>${tag.name}</strong></td>
-      <td>${tag.severity ? `<span class="ct-severity ct-severity--${tag.severity}">${tag.severity}</span>` : "<span class='ct-muted'>—</span>"}</td>
+      <td>${effectiveSeverity ? `<span class="ct-severity ct-severity--${effectiveSeverity}">${effectiveSeverity}</span>` : "<span class='ct-muted'>—</span>"}</td>
       <td>
         <select class="ct-select ct-select--sm ct-override-select" data-tag-id="${tag.id}">
           <option value="">— none —</option>

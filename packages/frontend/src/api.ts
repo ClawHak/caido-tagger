@@ -1,6 +1,6 @@
 import type { Caido } from "@caido/sdk-frontend";
 import type { API } from "caido-tagger-backend";
-import { setState } from "./state";
+import { getState, setState } from "./state";
 import type { Tag, Severity } from "./state";
 
 type SDK = Caido<API>;
@@ -8,20 +8,25 @@ type SDK = Caido<API>;
 // --- Project ---
 
 export async function loadProject(sdk: SDK): Promise<void> {
-  const res = await sdk.graphql.currentProject();
-  const p = res.currentProject;
-  setState(() => ({
-    projectId: p?.id ?? null,
-    projectName: p?.name ?? null,
-  }));
+  try {
+    const current = await sdk.backend.getCurrentProject();
+    if (current) {
+      setState(() => ({
+        projectId: current.id,
+        projectName: current.name,
+      }));
+    }
+  } catch (err) {
+    console.error(`[caido-tagger] loadProject error: ${err}`);
+  }
 }
 
 // --- Tags ---
 
-export async function loadTags(sdk: SDK, projectId: string): Promise<void> {
+export async function loadTags(sdk: SDK, projectId?: string | null): Promise<void> {
   const [tags, overrides] = await Promise.all([
-    sdk.backend.getTags(projectId),
-    sdk.backend.getProjectOverrides(projectId),
+    sdk.backend.getTags(projectId ?? ""),
+    projectId ? sdk.backend.getProjectOverrides(projectId) : Promise.resolve({} as Record<string, import("./state").Severity>),
   ]);
   setState(() => ({ tags, overrides }));
 }
@@ -36,7 +41,7 @@ export async function createTag(
 export async function updateTag(
   sdk: SDK,
   id: string,
-  fields: Parameters<typeof sdk.backend.updateTag>[1]
+  fields: { name: string; color: string; description: string; severity: string }
 ): Promise<Tag | undefined> {
   return sdk.backend.updateTag(id, fields);
 }
@@ -71,7 +76,7 @@ export async function loadTaggedRequests(
 ): Promise<void> {
   setState(() => ({ loading: true }));
 
-  const tagged = await sdk.backend.getTaggedRequestIds(projectId, tagIds);
+  const tagged = await sdk.backend.getTaggedRequestIds(projectId, tagIds ?? []);
 
   // Fetch request metadata in batches of 20
   const ids = tagged.map((r) => r.request_id);
@@ -133,5 +138,20 @@ export async function sendToAutomate(
 ): Promise<void> {
   await sdk.graphql.createAutomateSession({
     input: { requestSource: { id: requestId } },
+  });
+}
+
+// --- Refresh all ---
+
+export function refreshAll(sdk: SDK, includeRequests = false): void {
+  loadProject(sdk).then(() => {
+    const { projectId } = getState();
+    const jobs: Promise<void>[] = [loadTags(sdk, projectId)];
+    if (includeRequests && projectId) {
+      jobs.push(loadTaggedRequests(sdk, projectId));
+    }
+    return Promise.all(jobs);
+  }).catch((err) => {
+    console.error(`[caido-tagger] refreshAll error: ${err}`);
   });
 }

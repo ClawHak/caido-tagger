@@ -10,8 +10,10 @@ export type TagFormData = {
 
 type TagModalOptions = {
   tag?: Tag;
-  onSave: (data: TagFormData) => void;
+  onSave: (data: TagFormData) => void | Promise<void>;
   onCancel: () => void;
+  onError?: (err: unknown) => void;
+  defaultScope?: "global" | "project";
 };
 
 const SEVERITIES = ["", "info", "low", "medium", "high", "critical"];
@@ -65,8 +67,8 @@ export function createTagModal(opts: TagModalOptions): HTMLElement {
       <div class="ct-form-row">
         <label>Scope</label>
         <div class="ct-radio-group">
-          <label><input type="radio" name="ct-scope" value="global" ${(!opts.tag || opts.tag.scope === "global") ? "checked" : ""} /> Global</label>
-          <label><input type="radio" name="ct-scope" value="project" ${opts.tag?.scope === "project" ? "checked" : ""} /> This project only</label>
+          <label><input type="radio" name="ct-scope" value="global" ${(!opts.tag && opts.defaultScope !== "project") || opts.tag?.scope === "global" ? "checked" : ""} /> Global</label>
+          <label><input type="radio" name="ct-scope" value="project" ${opts.tag?.scope === "project" || (!opts.tag && opts.defaultScope === "project") ? "checked" : ""} /> This project only</label>
         </div>
       </div>
     </div>
@@ -95,7 +97,7 @@ export function createTagModal(opts: TagModalOptions): HTMLElement {
     if (e.target === overlay) close();
   });
 
-  modal.querySelector("#ct-modal-save")!.addEventListener("click", () => {
+  modal.querySelector("#ct-modal-save")!.addEventListener("click", async () => {
     const name = (modal.querySelector("#ct-tag-name") as HTMLInputElement).value.trim();
     if (!name) {
       (modal.querySelector("#ct-tag-name") as HTMLInputElement).classList.add("ct-input--error");
@@ -106,8 +108,20 @@ export function createTagModal(opts: TagModalOptions): HTMLElement {
     const description = (modal.querySelector("#ct-tag-description") as HTMLInputElement).value.trim();
     const scope = (modal.querySelector("input[name='ct-scope']:checked") as HTMLInputElement).value as "global" | "project";
 
-    overlay.remove();
-    opts.onSave({ name, color, severity, description, scope });
+    const saveBtn = modal.querySelector("#ct-modal-save") as HTMLButtonElement;
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving…";
+
+    try {
+      await opts.onSave({ name, color, severity, description, scope });
+      overlay.remove();
+    } catch (err) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Save";
+      if (opts.onError) {
+        opts.onError(err);
+      }
+    }
   });
 
   overlay.appendChild(modal);

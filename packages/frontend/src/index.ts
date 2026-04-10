@@ -3,7 +3,8 @@ import type { API } from "caido-tagger-backend";
 import type { CommandContext } from "@caido/sdk-frontend";
 
 import { getState, setState } from "./state";
-import { loadProject, loadTags, loadTaggedRequests } from "./api";
+import { loadProject, loadTags, loadTaggedRequests, refreshAll } from "./api";
+
 import { initRegistry } from "./registry";
 import { createTaggedRequestsPage } from "./pages/TaggedRequests";
 import { createTagConfigPage } from "./pages/TagConfig";
@@ -64,6 +65,9 @@ function buildPage(sdk: SDK): HTMLElement {
     }
 
     content.appendChild(currentPage);
+
+    // Refresh project + data on every tab switch (state updates trigger re-renders via subscriptions)
+    refreshAll(sdk, tab === "tagged-requests");
   };
 
   tabTagged.addEventListener("click", () => showTab("tagged-requests"));
@@ -84,7 +88,7 @@ export const init = async (sdk: SDK) => {
   // Expose global plugin registry for other plugins
   initRegistry();
 
-  // Load project context
+  // Load initial project context
   await loadProject(sdk);
 
   const { projectId } = getState();
@@ -140,6 +144,15 @@ export const init = async (sdk: SDK) => {
     commandId: Commands.tagRequest,
     leadingIcon: "fas fa-tags",
   });
+
+  // React to project switches in the Caido UI
+  try {
+    (sdk as any).projects.onCurrentProjectChange(() => {
+      refreshAll(sdk, true);
+    });
+  } catch {
+    // sdk.projects not available in this Caido version — ignore
+  }
 
   sdk.console.log("caido-tagger frontend initialized");
 };

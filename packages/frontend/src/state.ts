@@ -12,9 +12,15 @@ export type TaggedRequestRow = {
   meta?: RequestMeta;
 };
 
+export type ProjectInfo = {
+  id: string;
+  name: string;
+};
+
 export type AppState = {
   projectId: string | null;
   projectName: string | null;
+  availableProjects: ProjectInfo[];
   activeTab: ActiveTab;
   tags: Tag[];
   overrides: Record<string, Severity>;
@@ -31,6 +37,7 @@ type Listener = () => void;
 const state: AppState = {
   projectId: null,
   projectName: null,
+  availableProjects: [],
   activeTab: "tagged-requests",
   tags: [],
   overrides: {},
@@ -57,6 +64,25 @@ export function setState(fn: (s: AppState) => Partial<AppState>): void {
 export function subscribe(fn: Listener): () => void {
   listeners.add(fn);
   return () => listeners.delete(fn);
+}
+
+/**
+ * Returns the effective tag list for the current project context:
+ * - Without project: global tags only
+ * - With project: global + project tags, project tag wins on name collision
+ */
+export function effectiveTags(): Tag[] {
+  const { tags, projectId } = state;
+  if (!projectId) return tags.filter((t) => t.scope === "global");
+
+  const byName = new Map<string, Tag>();
+  for (const tag of tags) {
+    if (tag.scope === "global") byName.set(tag.name, tag);
+  }
+  for (const tag of tags) {
+    if (tag.scope === "project") byName.set(tag.name, tag); // overrides global
+  }
+  return [...byName.values()];
 }
 
 export function filteredRequests(): TaggedRequestRow[] {
