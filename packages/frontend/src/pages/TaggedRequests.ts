@@ -62,6 +62,37 @@ export function createTaggedRequestsPage(sdk: SDK): HTMLElement {
   lower.appendChild(detailHeader);
   lower.appendChild(editorRow);
 
+  // Drag-to-resize handle between upper and lower panels
+  const resizeHandle = document.createElement("div");
+  resizeHandle.className = "ct-resize-handle";
+
+  resizeHandle.addEventListener("mousedown", (startEvent) => {
+    startEvent.preventDefault();
+    const startY = startEvent.clientY;
+    const startHeight = lower.getBoundingClientRect().height;
+
+    resizeHandle.classList.add("ct-resize-handle--dragging");
+    document.body.style.cursor = "ns-resize";
+    document.body.style.userSelect = "none";
+
+    const onMove = (e: MouseEvent) => {
+      const delta = startY - e.clientY; // dragging up = larger lower panel
+      const newHeight = Math.max(80, Math.min(startHeight + delta, root.getBoundingClientRect().height * 0.9));
+      lower.style.flexBasis = `${newHeight}px`;
+    };
+
+    const onUp = () => {
+      resizeHandle.classList.remove("ct-resize-handle--dragging");
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  });
+
   // Editors created lazily on first use — avoids crashing init if API unavailable
   let reqEditor: ReturnType<typeof sdk.ui.httpRequestEditor> | null = null;
   let resEditor: ReturnType<typeof sdk.ui.httpResponseEditor> | null = null;
@@ -118,23 +149,27 @@ export function createTaggedRequestsPage(sdk: SDK): HTMLElement {
     }
   };
 
+  const setPanelVisible = (visible: boolean) => {
+    lower.hidden = !visible;
+    resizeHandle.hidden = !visible;
+  };
+
   const onRowClick = (requestId: string, shortId: string) => {
     if (activeId === requestId) {
-      // Toggle off
       activeId = null;
-      lower.hidden = true;
+      setPanelVisible(false);
       render();
       return;
     }
     activeId = requestId;
-    lower.hidden = false;
+    setPanelVisible(true);
     loadDetail(requestId, shortId);
-    render(); // update active row highlight
+    render();
   };
 
   closeBtn.addEventListener("click", () => {
     activeId = null;
-    lower.hidden = true;
+    setPanelVisible(false);
     render();
   });
 
@@ -148,6 +183,7 @@ export function createTaggedRequestsPage(sdk: SDK): HTMLElement {
 
   render();
   root.appendChild(upper);
+  root.appendChild(resizeHandle);
   root.appendChild(lower);
   return root;
 }

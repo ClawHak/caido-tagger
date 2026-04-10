@@ -434,8 +434,20 @@
   flex: 0 0 340px;
   display: flex;
   flex-direction: column;
-  border-top: 2px solid var(--c-border, #2a2a2a);
-  min-height: 0;
+  min-height: 80px;
+  max-height: 90%;
+}
+
+.ct-resize-handle {
+  flex-shrink: 0;
+  height: 5px;
+  background: var(--c-border, #2a2a2a);
+  cursor: ns-resize;
+  transition: background 0.15s;
+}
+.ct-resize-handle:hover,
+.ct-resize-handle--dragging {
+  background: #f97316;
 }
 
 .ct-detail-header {
