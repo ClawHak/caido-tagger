@@ -285,7 +285,7 @@ function buildUpperContent(
 }
 
 function buildToolbar(sdk: SDK): HTMLElement {
-  const { filterTagIds, filterSeverity, filterSearch, projectId } = getState();
+  const { filterTagIds, filterSeverity, filterMethod, filterStatus, filterSearch, projectId } = getState();
   const visibleTags = effectiveTags();
 
   const toolbar = document.createElement("div");
@@ -317,6 +317,33 @@ function buildToolbar(sdk: SDK): HTMLElement {
     setState(() => ({ filterSeverity: sevSelect.value, selectedIds: new Set() }));
   });
 
+  // Method filter
+  const methodSelect = document.createElement("select");
+  methodSelect.className = "ct-select";
+  methodSelect.innerHTML = `
+    <option value="">All Methods</option>
+    ${["GET","POST","PUT","PATCH","DELETE","HEAD","OPTIONS"].map(
+      (m) => `<option value="${m}" ${filterMethod === m ? "selected" : ""}>${m}</option>`
+    ).join("")}
+  `;
+  methodSelect.addEventListener("change", () => {
+    setState(() => ({ filterMethod: methodSelect.value, selectedIds: new Set() }));
+  });
+
+  // Status filter
+  const statusSelect = document.createElement("select");
+  statusSelect.className = "ct-select";
+  statusSelect.innerHTML = `
+    <option value="">All Status</option>
+    <option value="2xx" ${filterStatus === "2xx" ? "selected" : ""}>2xx</option>
+    <option value="3xx" ${filterStatus === "3xx" ? "selected" : ""}>3xx</option>
+    <option value="4xx" ${filterStatus === "4xx" ? "selected" : ""}>4xx</option>
+    <option value="5xx" ${filterStatus === "5xx" ? "selected" : ""}>5xx</option>
+  `;
+  statusSelect.addEventListener("change", () => {
+    setState(() => ({ filterStatus: statusSelect.value, selectedIds: new Set() }));
+  });
+
   // Search
   const search = document.createElement("input");
   search.className = "ct-input ct-input--search";
@@ -337,6 +364,8 @@ function buildToolbar(sdk: SDK): HTMLElement {
 
   toolbar.appendChild(tagSelect);
   toolbar.appendChild(sevSelect);
+  toolbar.appendChild(methodSelect);
+  toolbar.appendChild(statusSelect);
   toolbar.appendChild(search);
   toolbar.appendChild(refreshBtn);
 

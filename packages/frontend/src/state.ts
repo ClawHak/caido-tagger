@@ -28,6 +28,8 @@ export type AppState = {
   selectedIds: Set<string>;
   filterTagIds: string[];
   filterSeverity: string;
+  filterMethod: string;
+  filterStatus: string;
   filterSearch: string;
   loading: boolean;
 };
@@ -45,6 +47,8 @@ const state: AppState = {
   selectedIds: new Set(),
   filterTagIds: [],
   filterSeverity: "",
+  filterMethod: "",
+  filterStatus: "",
   filterSearch: "",
   loading: false,
 };
@@ -86,7 +90,7 @@ export function effectiveTags(): Tag[] {
 }
 
 export function filteredRequests(): TaggedRequestRow[] {
-  const { taggedRequests, filterTagIds, filterSeverity, filterSearch, tags } = state;
+  const { taggedRequests, filterTagIds, filterSeverity, filterMethod, filterStatus, filterSearch, tags } = state;
 
   return taggedRequests.filter((row) => {
     // Tag filter
@@ -101,6 +105,18 @@ export function filteredRequests(): TaggedRequestRow[] {
         (t) => state.overrides[t.id] ?? t.severity
       );
       if (!effectiveSeverities.includes(filterSeverity as Severity)) return false;
+    }
+
+    // Method filter
+    if (filterMethod && row.meta?.method !== filterMethod) return false;
+
+    // Status filter
+    if (filterStatus && row.meta) {
+      const s = row.meta.status;
+      if (filterStatus === "2xx" && (s < 200 || s > 299)) return false;
+      if (filterStatus === "3xx" && (s < 300 || s > 399)) return false;
+      if (filterStatus === "4xx" && (s < 400 || s > 499)) return false;
+      if (filterStatus === "5xx" && (s < 500 || s > 599)) return false;
     }
 
     // Search filter (host + path)
